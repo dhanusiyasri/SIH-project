@@ -8,6 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { formatTime } from "../dateTime";
 
 const API_URL = "http://127.0.0.1:8080";
 
@@ -16,40 +17,6 @@ const API_URL = "http://127.0.0.1:8080";
    Backend stores timestamps in UTC.
    Frontend displays them in IST.
 ========================================================= */
-function formatTime(timestamp) {
-  if (!timestamp) return "--";
-
-  let value = String(timestamp).trim();
-
-  /*
-   If backend sends UTC without timezone information,
-   explicitly treat it as UTC.
-  */
-  if (
-    !value.endsWith("Z") &&
-    !value.includes("+") &&
-    !/[+-]\d{2}:\d{2}$/.test(value)
-  ) {
-    value += "Z";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    console.warn("Invalid AI timestamp:", timestamp);
-    return "--";
-  }
-
-  return date.toLocaleTimeString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-}
-
-
 /* =========================================================
    GET TIMESTAMP FROM AI RESPONSE
 ========================================================= */

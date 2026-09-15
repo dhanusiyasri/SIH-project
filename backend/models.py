@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, Boolean
 
 from database import Base
 
@@ -86,3 +86,41 @@ class GatewayReading(Base):
     node2_fsr_resistance_ohm = Column(Float, nullable=True)
     node2_vibration = Column(Integer, nullable=True)
     node2_vibration_events = Column(Integer, nullable=True)
+
+
+class Alert(Base):
+    """Persistent state-change and recovery alerts generated from AI/risk output."""
+
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    node_id = Column(String, nullable=False, index=True)
+    severity = Column(String, nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    message = Column(String, nullable=False)
+    risk_score = Column(Float, default=0.0)
+    anomaly_score = Column(Float, default=0.0)
+    contributors_json = Column(Text, default="[]")
+    previous_severity = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    acknowledged = Column(Boolean, default=False)
+    acknowledged_at = Column(DateTime, nullable=True)
+    resolved = Column(Boolean, default=False, index=True)
+    resolved_at = Column(DateTime, nullable=True)
+
+
+class Notification(Base):
+    """Delivery log for alert notifications. External providers are not called in MOCK mode."""
+
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, nullable=True, index=True)
+    channel = Column(String, nullable=False, index=True)
+    recipient = Column(String, nullable=True)
+    provider = Column(String, nullable=False, default="MOCK")
+    status = Column(String, nullable=False, default="MOCKED")
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    sent_at = Column(DateTime, nullable=True)
+    error = Column(Text, nullable=True)

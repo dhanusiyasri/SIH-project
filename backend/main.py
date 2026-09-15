@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+import os
 
 import pandas as pd
 from fastapi import FastAPI, Depends, HTTPException
@@ -7,13 +8,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models import SensorReading, GatewayReading
+from database import Base, engine, get_db
+from models import SensorReading, GatewayReading, Alert, Notification
+
 
 from ml.feature_engineering import build_features
 from ml.anomaly_detector import score_dataframe
 from ml.risk_engine import calculate_risk
+from alerts.alert_manager import sync_alerts, serialize_alert
+from notifications.notification_manager import dispatch_alerts, serialize_notification, preview_notification, NOTIFICATION_MODE
 
+
+# Create all database tables if they do not already exist
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Mine Subsidence Monitoring API",
@@ -142,7 +149,20 @@ class GatewayPacket(BaseModel):
 # ============================================================
 
 def utc_now():
+    """Return the current UTC time in SQLite's timezone-naive format."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def utc_isoformat(value) -> str:
+    """Serialize a database or pandas timestamp as a single UTC ISO-8601 value."""
+    timestamp = pd.Timestamp(value)
+
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize("UTC")
+    else:
+        timestamp = timestamp.tz_convert("UTC")
+
+    return timestamp.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def gateway_reading_to_row(reading):
@@ -534,7 +554,7 @@ def latest_sensors(
     result.append({
         "id": gateway.id,
         "node_id": "NODE_01",
-        "timestamp": timestamp.isoformat() + "Z",
+        "timestamp": utc_isoformat(timestamp),
 
         "accel_peak_g": gateway.node1_accel_magnitude_g,
         "gyro_peak_dps": gateway.node1_gyro_magnitude_dps,
@@ -575,7 +595,7 @@ def latest_sensors(
         result.append({
             "id": gateway.id,
             "node_id": "NODE_02",
-            "timestamp": timestamp.isoformat() + "Z",
+            "timestamp": utc_isoformat(timestamp),
 
             "accel_peak_g":
                 gateway.node2_accel_magnitude_g,
@@ -658,8 +678,7 @@ def sensor_history(
             result.append({
                 "id": reading.id,
                 "node_id": "NODE_01",
-                "timestamp":
-                    timestamp.isoformat() + "Z",
+                "timestamp": utc_isoformat(timestamp),
 
                 "accel_peak_g":
                     reading.node1_accel_magnitude_g,
@@ -691,8 +710,7 @@ def sensor_history(
             result.append({
                 "id": reading.id,
                 "node_id": "NODE_02",
-                "timestamp":
-                    timestamp.isoformat() + "Z",
+                "timestamp": utc_isoformat(timestamp),
 
                 "accel_peak_g":
                     reading.node2_accel_magnitude_g,
@@ -726,6 +744,100 @@ def sensor_history(
 
 
 # ============================================================
+# GIS CONFIGURATION
+# ============================================================
+
+# Coordinates are intentionally configurable. The fallback values are
+# demo coordinates only and must be replaced with the actual mine/node
+# coordinates before field deployment.
+GIS_MINE_LAT = float(os.getenv("MINE_LAT", "20.000000"))
+GIS_MINE_LON = float(os.getenv("MINE_LON", "80.000000"))
+GIS_NODE_OFFSET = float(os.getenv("MINE_NODE_OFFSET", "0.001000"))
+GIS_USING_DEMO_COORDINATES = (
+    "MINE_LAT" not in os.environ or "MINE_LON" not in os.environ
+)
+
+
+# ============================================================
+# GIS OVERVIEW
+# ============================================================
+
+@app.get("/api/gis/nodes")
+def gis_nodes(
+    db: Session = Depends(get_db)
+):
+    """
+    Return map-ready monitoring-node data.
+
+    GIS consumes the existing AI/risk result; it does not run a
+    separate anomaly model. Coordinates are configuration values.
+    """
+
+    df = get_gateway_dataframe(db)
+
+    if df.empty:
+        return {
+            "site": {
+                "latitude": GIS_MINE_LAT,
+                "longitude": GIS_MINE_LON,
+                "risk": "NO_DATA",
+                "risk_score": 0,
+            },
+            "nodes": [],
+            "using_demo_coordinates": GIS_USING_DEMO_COORDINATES,
+        }
+
+    ai_result = calculate_ai_for_dataframe(df)
+    latest_ai = ai_result.iloc[-1]
+
+    latest_gateway = (
+        db.query(GatewayReading)
+        .order_by(GatewayReading.server_timestamp.desc())
+        .first()
+    )
+
+    site_risk = str(latest_ai.get("ai_risk", "NORMAL"))
+    risk_score = float(latest_ai.get("risk_score", 0) or 0)
+    last_seen = utc_isoformat(latest_gateway.server_timestamp)
+    node2_online = bool(latest_gateway.node2_online)
+
+    nodes = [
+        {
+            "node_id": "NODE_01",
+            "latitude": GIS_MINE_LAT,
+            "longitude": GIS_MINE_LON,
+            "status": "ONLINE",
+            "last_seen": last_seen,
+            "site_risk": site_risk,
+            "risk_score": risk_score,
+            "risk_scope": "SITE",
+        },
+        {
+            "node_id": "NODE_02",
+            "latitude": GIS_MINE_LAT + GIS_NODE_OFFSET,
+            "longitude": GIS_MINE_LON + GIS_NODE_OFFSET,
+            "status": "ONLINE" if node2_online else "OFFLINE",
+            "last_seen": last_seen,
+            "site_risk": site_risk,
+            "risk_score": risk_score,
+            "risk_scope": "SITE",
+        },
+    ]
+
+    return {
+        "site": {
+            "latitude": GIS_MINE_LAT,
+            "longitude": GIS_MINE_LON,
+            "risk": site_risk,
+            "risk_score": risk_score,
+            "last_seen": last_seen,
+        },
+        "nodes": nodes,
+        "using_demo_coordinates": GIS_USING_DEMO_COORDINATES,
+    }
+
+
+# ============================================================
 # NODE STATUS
 # ============================================================
 
@@ -747,8 +859,7 @@ def get_nodes(
         {
             "node_id": "NODE_01",
             "status": "ONLINE",
-            "last_seen":
-                latest.server_timestamp.isoformat() + "Z"
+            "last_seen": utc_isoformat(latest.server_timestamp)
         }
     ]
 
@@ -757,8 +868,7 @@ def get_nodes(
         nodes.append({
             "node_id": "NODE_02",
             "status": "ONLINE",
-            "last_seen":
-                latest.server_timestamp.isoformat() + "Z"
+            "last_seen": utc_isoformat(latest.server_timestamp)
         })
 
     return nodes
@@ -788,8 +898,7 @@ def gateway_latest(
     return {
         "id": reading.id,
 
-        "timestamp":
-            reading.server_timestamp.isoformat() + "Z",
+        "timestamp": utc_isoformat(reading.server_timestamp),
 
         "device_timestamp_ms":
             reading.device_timestamp_ms,
@@ -830,10 +939,7 @@ def ai_latest(
     row = result.iloc[-1]
 
     return {
-        "timestamp":
-            pd.Timestamp(
-                row["server_timestamp"]
-            ).isoformat() + "Z",
+        "timestamp": utc_isoformat(row["server_timestamp"]),
 
         "anomaly_score":
             float(row["anomaly_score"]),
@@ -849,6 +955,174 @@ def ai_latest(
 
         "contributors":
             row["contributors"]
+    }
+
+
+# ============================================================
+# ALERTS
+# ============================================================
+
+def _current_ai_state(db: Session):
+    """Calculate the current site AI/risk state for alert synchronization."""
+
+    df = get_gateway_dataframe(db)
+
+    if df.empty:
+        raise HTTPException(
+            status_code=404,
+            detail="No gateway data available"
+        )
+
+    result = calculate_ai_for_dataframe(df)
+    latest_ai = result.iloc[-1]
+
+    latest_gateway = (
+        db.query(GatewayReading)
+        .order_by(GatewayReading.server_timestamp.desc())
+        .first()
+    )
+
+    return latest_ai, latest_gateway
+
+
+@app.get("/api/alerts")
+def get_alerts(
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """Return recent alerts after synchronizing the current monitoring state."""
+
+    limit = max(1, min(limit, 200))
+    latest_ai, latest_gateway = _current_ai_state(db)
+    current_alerts = sync_alerts(
+        db,
+        ai_result=latest_ai,
+        latest_gateway=latest_gateway,
+    )
+    dispatch_alerts(db, current_alerts)
+
+    alerts = (
+        db.query(Alert)
+        .order_by(Alert.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [serialize_alert(alert) for alert in alerts]
+
+
+@app.get("/api/alerts/latest")
+def get_latest_alert(
+    db: Session = Depends(get_db)
+):
+    """Synchronize and return the latest alert/recovery record."""
+
+    latest_ai, latest_gateway = _current_ai_state(db)
+    current_alerts = sync_alerts(
+        db,
+        ai_result=latest_ai,
+        latest_gateway=latest_gateway,
+    )
+    dispatch_alerts(db, current_alerts)
+
+    alert = (
+        db.query(Alert)
+        .order_by(Alert.created_at.desc())
+        .first()
+    )
+
+    if not alert:
+        return None
+
+    return serialize_alert(alert)
+
+
+@app.post("/api/alerts/{alert_id}/acknowledge")
+def acknowledge_alert(
+    alert_id: int,
+    db: Session = Depends(get_db)
+):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    if not alert.acknowledged:
+        alert.acknowledged = True
+        alert.acknowledged_at = utc_now()
+        db.commit()
+        db.refresh(alert)
+
+    return serialize_alert(alert)
+
+
+@app.post("/api/alerts/{alert_id}/resolve")
+def resolve_alert(
+    alert_id: int,
+    db: Session = Depends(get_db)
+):
+    alert = db.query(Alert).filter(Alert.id == alert_id).first()
+
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    if not alert.resolved:
+        alert.resolved = True
+        alert.resolved_at = utc_now()
+        db.commit()
+        db.refresh(alert)
+
+    return serialize_alert(alert)
+
+
+# ============================================================
+# NOTIFICATIONS
+# ============================================================
+
+@app.get("/api/notifications")
+def get_notifications(
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """Return notification delivery logs."""
+
+    limit = max(1, min(limit, 200))
+    notifications = (
+        db.query(Notification)
+        .order_by(Notification.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [serialize_notification(item) for item in notifications]
+
+
+@app.get("/api/notifications/mode")
+def get_notification_mode():
+    """Show whether the notification layer is running in safe MOCK mode."""
+    return {
+        "mode": NOTIFICATION_MODE,
+        "external_messages_enabled": False,
+        "note": "This prototype does not send real email/SMS messages."
+    }
+
+
+@app.post("/api/notifications/preview")
+def preview_notifications(
+    db: Session = Depends(get_db)
+):
+    """Side-effect-free notification preview using the current latest alert."""
+
+    alert = (
+        db.query(Alert)
+        .order_by(Alert.created_at.desc())
+        .first()
+    )
+    if not alert:
+        raise HTTPException(status_code=404, detail="No alerts available for preview")
+
+    return {
+        "alert": serialize_alert(alert),
+        "notifications": preview_notification(alert),
     }
 
 
@@ -873,10 +1147,7 @@ def ai_history(
     for _, row in result.iterrows():
 
         history.append({
-            "timestamp":
-                pd.Timestamp(
-                    row["server_timestamp"]
-                ).isoformat() + "Z",
+            "timestamp": utc_isoformat(row["server_timestamp"]),
 
             "anomaly_score":
                 float(row["anomaly_score"]),

@@ -2,28 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import SensorChart from "./SensorChart";
 import "./index.css";
 import AIAnalysis from "./components/AIAnalysis";
+import AlertPanel from "./components/AlertPanel";
+import GISMap from "./GISMap";
+import { formatTime } from "./dateTime";
 
 const API_URL =
   import.meta.env.VITE_API_URL || "http://127.0.0.1:8080";
 
 const POLL_INTERVAL = 2000;
 const MAX_POINTS = 60;
-
-function formatTime(timestamp) {
-  if (!timestamp) return "--";
-
-  const date = new Date(timestamp);
-
-  if (Number.isNaN(date.getTime())) return "--";
-
-  return date.toLocaleTimeString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-}
 
 function formatValue(value, decimals = 2) {
   const number = Number(value);
@@ -416,6 +403,10 @@ const readings =
       <main>
 
         {/* ================= MONITORING NODES ================= */}
+
+        <GISMap />
+
+        <AlertPanel />
 
         <section className="section">
 
