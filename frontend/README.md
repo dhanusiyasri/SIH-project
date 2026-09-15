@@ -1,16 +1,50 @@
-# React + Vite
+# MineWatch Frontend — Stage 10
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Final frontend integration and diagnostics pass
 
-Currently, two official plugins are available:
+This stage is based on Stage 9 and adds a read-only **System Diagnostics** page. It checks the existing backend endpoints used by the frontend without changing the FastAPI backend or database.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Run
 
-## React Compiler
+```powershell
+cd frontend
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Backend:
 
-## Expanding the ESLint configuration
+```powershell
+cd backend
+.\venv\Scripts\activate
+uvicorn main:app --reload --host 127.0.0.1 --port 8080
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Routes
+
+- `/`
+- `/monitoring`
+- `/sensors`
+- `/ai-analysis`
+- `/gis`
+- `/alerts`
+- `/history`
+- `/settings`
+- `/diagnostics`
+
+Open **Settings → System diagnostics** to run the final browser-to-backend checks.
+
+### API contract checks
+
+- `GET /api/nodes`
+- `GET /api/sensors/latest`
+- `GET /api/ai/latest`
+- `GET /api/ai/history`
+- `GET /api/ai/summary`
+- `GET /api/alerts?limit=200`
+
+The diagnostics page performs GET-only checks. It does not acknowledge or resolve alerts.
+
+### Scope
+
+A passing diagnostics run proves browser/API connectivity and response availability. It does not prove ESP32 sensor accuracy, ESP-NOW reliability, database persistence under hardware load, or ML calibration. Those are hardware/integration tests.

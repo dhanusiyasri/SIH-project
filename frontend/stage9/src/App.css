@@ -121,23 +121,3 @@ code { font-size:.9em; }
   font-weight: 800;
   border: 1px solid currentColor;
 }
-
-/* Stage 10 - integration diagnostics */
-.diagnostics-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
-.diagnostics-summary > div { border:1px solid var(--border,#d9dee7); border-radius:14px; background:var(--surface,#fff); padding:18px; display:grid; gap:4px; }
-.diagnostics-summary strong { font-size:22px; }
-.diagnostics-summary span { color:var(--muted,#667085); font-size:12px; }
-.diagnostics-list { display:grid; gap:0; border:1px solid var(--border,#d9dee7); border-radius:12px; overflow:hidden; }
-.diagnostic-row { display:grid; grid-template-columns:38px 1fr auto; align-items:center; gap:12px; padding:14px; border-bottom:1px solid #eaecf0; }
-.diagnostic-row:last-child { border-bottom:0; }
-.diagnostic-icon { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font-weight:800; background:#f2f4f7; color:#667085; }
-.diagnostic-icon.pass { background:#dcfae6; color:#027a48; }
-.diagnostic-icon.fail { background:#fee4e2; color:#b42318; }
-.diagnostic-main { display:grid; gap:4px; min-width:0; }
-.diagnostic-main span { color:#667085; font-size:12px; overflow-wrap:anywhere; }
-.diagnostic-meta { display:grid; justify-items:end; gap:4px; font-size:11px; color:#667085; }
-.diagnostic-meta b { font-size:10px; letter-spacing:.04em; }
-.pass-text { color:#027a48; }
-.fail-text { color:#b42318; }
-.diagnostics-link-panel { display:flex; align-items:center; justify-content:space-between; gap:18px; }
-@media (max-width:700px) { .diagnostics-summary { grid-template-columns:1fr; } .diagnostic-row { grid-template-columns:32px 1fr; } .diagnostic-meta { grid-column:2; justify-items:start; display:flex; gap:10px; } .diagnostics-link-panel { align-items:flex-start; flex-direction:column; } }

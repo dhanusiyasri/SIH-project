@@ -8,7 +8,6 @@ import MineGISPage from "./pages/MineGIS";
 import Alerts from "./pages/Alerts";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
-import Diagnostics from "./pages/Diagnostics";
 import { useSystemStatus } from "./hooks/useSystemStatus";
 import "./index.css";
 
@@ -21,7 +20,6 @@ const pageMeta = {
   "/alerts": ["Alerts", "Current and historical monitoring alerts"],
   "/history": ["History", "Historical sensor and risk trends"],
   "/settings": ["Settings", "System status and application configuration"],
-  "/diagnostics": ["System Diagnostics", "Read-only API integration and readiness checks"],
 };
 
 function normalizePath(path) {
@@ -59,8 +57,7 @@ export default function App() {
     case "/gis": page = <MineGISPage />; break;
     case "/alerts": page = <Alerts />; break;
     case "/history": page = <History />; break;
-    case "/settings": page = <Settings navigate={navigate} />; break;
-    case "/diagnostics": page = <Diagnostics onBack={() => navigate("/settings")} />; break;
+    case "/settings": page = <Settings />; break;
     default: page = <Dashboard />;
   }
 

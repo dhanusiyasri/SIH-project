@@ -22,7 +22,7 @@ INTERVAL_SECONDS = 0.5
 # SEVERE_EVENT
 # ------------------------------------------------------------
 
-SCENARIO = "NORMAL"
+SCENARIO = "GRADUAL_DEFORMATION"
 
 
 # ============================================================

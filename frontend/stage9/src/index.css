@@ -1203,28 +1203,8 @@ footer {
 .panel-heading h2 { margin: 0; font-size: 16px; color: #1b2638; }
 .panel-heading p { margin: 5px 0 0; color: #8791a1; font-size: 11px; }
 .refresh-badge { padding: 6px 9px; background: #f5f7fa; border-radius: 6px; color: #7d8797; font-size: 9px; white-space: nowrap; }
-/* Dashboard map + alerts panels share the same row height.
-   The alerts list scrolls inside its panel instead of increasing the row height. */
 .map-panel > .gis-map-container, .map-panel .map-container { min-height: 300px; }
-.map-panel, .alerts-panel { min-height: 0; }
-.alerts-panel { overflow: hidden; }
-.alerts-panel > .alert-section {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.alerts-panel > .alert-section > .alerts-card {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-}
-.alerts-panel > .alert-section > .alert-note {
-  flex: 0 0 auto;
-}
-
+.alerts-panel { min-height: 360px; }
 .dashboard-node-grid { margin-top: 0; }
 
 .placeholder-page { min-height: 420px; border: 1px dashed #ccd4df; border-radius: 12px; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; }
